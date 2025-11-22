@@ -49,7 +49,7 @@ def parseArgs():
                         prog="Compass",
                         description="Compass version "+str(__version__)+
                         ". Metabolic Modeling for Single Cells. "
-                        "For more details on usage refer to the documentation: https://yoseflab.github.io/Compass/")
+                        "For more details on usage refer to the documentation: https://github.com/wagnerlab-berkeley/Compass")
 
     parser.add_argument("--data", help="Gene expression matrix." 
                         " Should be a tsv file with one row per gene and one column per sample", 
