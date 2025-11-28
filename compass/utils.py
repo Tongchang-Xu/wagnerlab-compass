@@ -8,7 +8,7 @@ from __future__ import print_function, division
 import scipy.io
 import pandas as pd
 import numpy as np
-from .globals import MODEL_DIR
+from .globals import LICENSE_DIR, MODEL_DIR
 import os
 import anndata
 
@@ -172,6 +172,9 @@ def read_metadata(model_name):
     reaction_metadata_path = os.path.join(metadata_dir, 'reaction_metadata.csv')
 
     return pd.read_csv(reaction_metadata_path, index_col=0)
+
+def get_gurobi_credentials():
+    return parse_gurobi_license_file(os.path.join(LICENSE_DIR, 'gurobi.lic'))
 
 def parse_gurobi_license_file(file_path):
     credentials = {}

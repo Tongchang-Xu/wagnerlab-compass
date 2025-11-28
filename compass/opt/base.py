@@ -25,19 +25,27 @@ class LinearProgramDelta:
     objective: dict
     # Sense of optimization: max or min
     sense: str
-    # Metabolite ID -> reaction ID
-    added_secretion: dict = field(default_factory=dict)
-    # Metabolite ID -> reaction ID
-    added_uptake: dict = field(default_factory=dict)
+    # Metabolite ID -> reaction ID for new secretion reaction
+    added_secretion: dict[str,str] = field(default_factory=dict)
+    # Metabolite ID -> reaction ID for new uptake reaction
+    added_uptake: dict[str,str] = field(default_factory=dict)
     # Reaction IDs
-    blocked_reactions: set = field(default_factory=set)
+    blocked_reactions: set[str] = field(default_factory=set)
+    # Reaction ID -> new minimum flux
+    # Used to add the constraints for the maximum flux to be near v_r^opt
+    high_flux: dict[str,np.float64] = field(default_factory=dict)
 
 
 @dataclass
 class Solution:
     """Solution from a linear program"""
 
-    obj_status: str
+    # Whether the status is a success
+    success: bool
+    # Status as a string, useful for seeing errors if success is false
+    # Will be optimizer specific
+    status: str
+    # Objective value for the problem
     obj_value: np.float64
 
 

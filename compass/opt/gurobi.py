@@ -1,13 +1,15 @@
-from enum import Enum
+import logging
 from typing import Any
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 
-from compass import utils
-from compass.globals import EXCHANGE_LIMIT
+from compass.globals import BETA, EXCHANGE_LIMIT
 from compass.models.MetabolicModel import MetabolicModel
 from .base import Optimizer, LinearProgramDelta, Solution
+
+# TODO: Add a proper logging heirachy here.
+logger = logging.getLogger("compass")
 
 def default_gurobi_config() -> dict[str, Any]:
     """
@@ -22,7 +24,7 @@ def default_gurobi_config() -> dict[str, Any]:
         GRB.Param.OptimalityTol: 1e-9,     # Default is 1e-6, minimum is 1e-9
         GRB.Param.BarConvTol: 1e-12,       # Default is 1e-8, minimum is 1e-12
         GRB.Param.Threads: 1,              # Set the number of threads to use
-        GRB.Param.Method: -1,              # 0: Automatic, 1: Primal Simplex, 2: Dual Simplex, etc.
+        GRB.Param.Method: 0,              # 0: Automatic, 1: Primal Simplex, 2: Dual Simplex, etc.
     }
 
 class GurobiOptimizer(Optimizer):
@@ -30,7 +32,7 @@ class GurobiOptimizer(Optimizer):
     Gurobi-based implementation of the Optimizer.
     """
 
-    def __init__(self, model: MetabolicModel, credentials: dict[str, str] = None, logger = None, config: dict[str, Any] = None):
+    def __init__(self, model: MetabolicModel, credentials: dict[str, str] = None, config: dict[str, Any] = None):
         super().__init__(model)
         self.credentials = credentials
 
@@ -77,11 +79,13 @@ class GurobiOptimizer(Optimizer):
             # x[0] is name of reaction
             # x[1] is stoichiometric coefficient of metabolite in reaction x[0]
             expr = gp.LinExpr()
-            for [coeff, rxn_id] in stoichiometry:
-                expr += coeff * gp_model.getVarByName(rxn_id)
+            for [rxn_id, coeff] in stoichiometry:
+                var = gp_model.getVarByName(rxn_id)
+                expr += coeff * var
             
             # Each metabolite must obey mass conservation
-            gp_model.addConstr(expr == 0, name=metab_id)
+            constr = gp_model.addConstr(expr == 0, name=metab_id)
+            logger.info(f"DEBUG!: Added constraint name={metab_id}, resulting name={constr.getAttr(GRB.Attr.ConstrName)}")
 
         return gp_model
 
@@ -94,36 +98,66 @@ class GurobiOptimizer(Optimizer):
         # With gurobi, we should always be able to revert the delta
         original_bounds = {}
         added_vars = []
+        added_constraints = []
 
         # TODO: Double check EXCHANGE_LIMIT vs maximum_flux asymmetry
         # Probably due to limited physical uptake rates vs arbitrary secretion
         for (met_id, rxn_id) in delta.added_secretion.items():
             met_id_constr = self.gp_model.getConstrByName(met_id)
-            rxn_var = self.gp_model.addVar(lb=0.0, ub=self.model.maximum_flux, name=rxn_id, vtype=GRB.CONTINUOUS)
+            rxn_var = self.gp_model.addVar(
+                lb=0.0, 
+                ub=self.model.maximum_flux, 
+                name=rxn_id, 
+                vtype=GRB.CONTINUOUS
+            )
+            # Add secretion to metabolite's constraint as a reduction in metabolite
             self.gp_model.chgCoeff(met_id_constr, rxn_var, -1.0)
             self.gp_model.update()
+            # Update after each new reaction, to ensure the coefficient change has been applied
 
-        for (met_id, rxn_id) in delta.added_secretion.items():
-            met_id_constr = self.gp_model.getConstrByName(met_id)
-            rxn_var = self.gp_model.addVar(lb=0.0, ub=EXCHANGE_LIMIT, name=rxn_id, vtype=GRB.CONTINUOUS)
+        for (met_id, rxn_id) in delta.added_uptake.items():
+            try:
+                met_id_constr = self.gp_model.getConstrByName(met_id)
+            except Exception as e:
+                for constr in self.gp_model.getConstrs():
+                    logger.info(f"constraint name={constr.getAttr(GRB.Attr.ConstrName)}")
+                met_get = self.model.SMAT.get(met_id)
+                raise Exception(f"Failed to get constraint for metabolite: {met_id}. SMAT indicates {met_get}") from e
+
+            rxn_var = self.gp_model.addVar(
+                lb=0.0,
+                ub=EXCHANGE_LIMIT, 
+                name=rxn_id, 
+                vtype=GRB.CONTINUOUS
+            )
+            # Add uptake to metabolite's constraint as an increase in metabolite
             self.gp_model.chgCoeff(met_id_constr, rxn_var, 1.0)
             self.gp_model.update()
+            # TODO: need to check if met_id_constr is modified by added_secretion
+            # Find way to remove gp_model.update() in added_secretion
 
         # Close all blocked reactions by setting upper bound to lower bound
         # and store previous bounds so they can be restored later
         for rxn_id in delta.blocked_reactions:
             # TODO: Note that getVarByName is inefficient.
             var = self.gp_model.getVarByName(rxn_id)
+            if var is None:
+                raise Exception(f"{rxn_id} not found")
             old_ub = var.getAttr(GRB.Attr.UB)
             old_lb = var.getAttr(GRB.Attr.LB)
             original_bounds[rxn_id] = old_ub
             var.setAttr(GRB.Attr.UB, old_lb)
             
+        for (rxn_id, limit) in delta.high_flux.items():
+            var = self.gp_model.getVarByName(rxn_id)
+            # TODO do this by setting the lb instead?
+            added_constraints.append(self.gp_model.addConstr(var >= limit, name=f"{rxn_id}_REACTION_OPT"))
+
         self.gp_model.update()
 
         # Construct objective linear expression by summing all coefficient * reaction pairs.
         obj_expr = gp.LinExpr()
-        for (rxn_id, coeff) in id, coeff in delta.objective:
+        for (rxn_id, coeff) in delta.objective.items():
             rxn_var = self.gp_model.getVarByName(rxn_id)
             obj_expr += coeff * rxn_var
 
@@ -134,7 +168,9 @@ class GurobiOptimizer(Optimizer):
         self.gp_model.setObjective(obj_expr, sense)
 
         self.gp_model.update()
+        logger.debug("Starting solving gp_model")
         self.gp_model.optimize()
+        logger.debug("Finished solving gp_model")
 
         status = self.gp_model.Status
         obj_value = self.gp_model.ObjVal
@@ -154,7 +190,13 @@ class GurobiOptimizer(Optimizer):
         # Remove added variables
         # It appears that removing variables also removes them from constraints
         for var in added_vars:
+            logger.info(f"Removing var name={var.getAttr(GRB.Attr.VarName)}")
             self.gp_model.remove(var)
+
+        for constr in added_constraints:
+            logger.info(f"Removing constraint name={constr.getAttr(GRB.Attr.ConstrName)}")
+            self.gp_model.remove(constr)
+
         self.gp_model.update()
 
         return Solution(success=success, status=status, obj_value=obj_value)

@@ -23,7 +23,7 @@ from math import ceil
 from .compass import cache
 from ._version import __version__
 from .compass.torque import submitCompassTorque
-from .compass.algorithm import singleSampleCompass, maximize_reaction_range, maximize_metab_range, initialize_gurobi_model
+from .compass.algorithm import singleSampleCompass, maximize_reaction_range, maximize_metab_range
 from .compass.microclustering import microcluster, pool_matrix_cols, unpool_columns
 from .models import init_model
 from .models.partitionModel import partition_model
@@ -136,6 +136,11 @@ def parseArgs():
                         help="Number of threads to use per sample",
                         type=int, default=1,
                         metavar="N")
+    
+    parser.add_argument("--optimizer",
+                        help = "Select an optimization software to solve flux balance analysis problems with",
+                        choices=["gurobi", "cuopt"],
+                        default="gurobi")
 
     parser.add_argument("--turbo",
                         help="If you are willing to sacrifice some accuracy in favour of speed, "
