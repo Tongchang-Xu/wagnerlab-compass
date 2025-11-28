@@ -84,8 +84,9 @@ class GurobiOptimizer(Optimizer):
                 expr += coeff * var
             
             # Each metabolite must obey mass conservation
-            constr = gp_model.addConstr(expr == 0, name=metab_id)
-            logger.info(f"DEBUG!: Added constraint name={metab_id}, resulting name={constr.getAttr(GRB.Attr.ConstrName)}")
+            gp_model.addConstr(expr == 0, name=metab_id)
+
+        gp_model.update()
 
         return gp_model
 
