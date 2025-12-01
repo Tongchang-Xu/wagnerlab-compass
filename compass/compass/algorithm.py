@@ -14,7 +14,8 @@ import numpy as np
 
 from compass.models.MetabolicModel import MetabolicModel, Reaction
 from compass.opt.base import LinearProgramDelta, Optimizer, Solution
-from compass.opt.gurobi import GurobiOptimizer
+from compass.opt.cuopt import CuoptOptimizer, get_cuopt_config
+from compass.opt.gurobi import GurobiOptimizer, get_gurobi_config
 from .. import utils
 from .. import models
 from . import cache
@@ -274,10 +275,10 @@ def compass_exchange(
 
         # If there are no selected, then go to next metabolite
         if not reactions:
-            logger.info(f"Skipping {met_id}")
+            logger.debug(f"Skipping {met_id}")
             continue
-        # Otherwise, ensure we have all of the uptake/secretion reactions
-        logger.info(f"DEBUG!: Metabolite {met_id} has selected reactions {[rxn.id for rxn in reactions]}")
+        # If we care about any of these reactions, then collect optimal uptake and secretion.
+        # NOTE: This may include more reactions than strictly selected
         reactions = [model.reactions[x] for x in rxn_ids]
 
         # Extra reactions are duplicates
@@ -293,8 +294,6 @@ def compass_exchange(
                     secretion_rxn = reaction.id
                 else:
                     extra_secretion_rxns.append(reaction.id)
-
-        logger.info(f"DEBUG!: Metabolite {met_id} has {uptake_rxn} and {secretion_rxn}")
 
         #if the selected_rxns or only_exchange options are used --> then we don't want to add reactions unless one of the pair already exists
         if (only_exchange or args['select_reactions']) and (uptake_rxn is None) and (secretion_rxn is None):
@@ -501,18 +500,16 @@ def initialize_optimization(model: MetabolicModel, args) -> Optimizer:
     """
     Builds a flux balance analysis model from the specified metabolic model.
     """
+    num_threads = args.get('num_threads')
+    lpmethod = args.get('lpmethod')
     if args['optimizer'] == "gurobi":
         credentials = utils.get_gurobi_credentials()
-        config = {}
-        num_threads = args.get('num_threads')
-        if num_threads:
-            config[GRB.Param.Threads] = num_threads
-        lpmethod = args.get('lpmethod')
-        if lpmethod:
-            config[GRB.Param.Method] = lpmethod
-        return GurobiOptimizer(model, credentials, config)
+        config = get_gurobi_config(num_threads, lpmethod)
+        return GurobiOptimizer(model, config, credentials=credentials)
     elif args['optimizer'] == "cuopt":
-        pass
+        # Ignoring the lpmethod for now, as gurobi and cplex differ in methods.
+        config = get_cuopt_config(num_threads, None)
+        return CuoptOptimizer(model, config)
         
 
 def initialize_gurobi_model(model, credentials, num_threads=1, lpmethod=-1, adv=2):
