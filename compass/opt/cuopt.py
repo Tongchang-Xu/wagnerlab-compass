@@ -3,19 +3,21 @@ import multiprocessing
 
 MULTIPROCESSING_CONFIGURED = False
 
+
 def configure_multiprocessing():
     """
     Sets multiprocessing to use spawn instead of fork.
-    This is because CUDA does not support forking, though for non-CUDA runs forking is 
+    This is because CUDA does not support forking, though for non-CUDA runs forking is
     generally faster.
     """
     global MULTIPROCESSING_CONFIGURED
     if not MULTIPROCESSING_CONFIGURED:
         try:
-            multiprocessing.set_start_method('spawn')
+            multiprocessing.set_start_method("spawn")
         except RuntimeError:
             pass
         MULTIPROCESSING_CONFIGURED = True
+
 
 configure_multiprocessing()
 
@@ -69,11 +71,22 @@ from compass.opt.base import LinearProgramDelta, Optimizer, Solution
 
 
 def get_cuopt_config(threads: int | None = None, method: int | None = None) -> dict[str, Any]:
+    """
+    Docstring for get_cuopt_config
+
+    :param threads: Number of threads cuopt solver should use
+    :type threads: int | None
+    :param method: The method for solving linear programs
+    :type method: int | None
+    :return: Dictionary mapping cuopt settings to values
+    :rtype: dict[str, Any]
+    """
     if threads is None:
         threads = 1
     if method is None:
         method = 0
     return {
+        # N.B. cuopt does not actually respect this flag, but should be resolved in coming PR
         CUOPT_LOG_TO_CONSOLE: False,
         CUOPT_PRESOLVE: False,
         CUOPT_NUM_CPU_THREADS: threads,
@@ -82,6 +95,8 @@ def get_cuopt_config(threads: int | None = None, method: int | None = None) -> d
         # Based on C header here https://github.com/NVIDIA/cuopt/blob/7543358c9caca5e557d6e48fefa8d94baadcbab9/cpp/include/cuopt/linear_programming/constants.h#L104C1-L104C36
         # The methods are concurrent, pdlp, dual simplex, barrier enumerated as 0,1,2,3
         CUOPT_METHOD: method,
+        # Determinism is preferrable for replication.
+        CUOPT_CUDSS_DETERMINISTIC: True,
     }
 
 
@@ -89,6 +104,7 @@ class CuoptOptimizer(Optimizer):
     """
     cuOpt-based implementation of the Optimizer
     """
+
     problem: Problem
     variables: dict[str, Variable]
     constraints: dict[str, Constraint]
@@ -99,12 +115,11 @@ class CuoptOptimizer(Optimizer):
         """
         super().__init__(model)
         self.solver_settings = SolverSettings()
-        for (name, value) in config.items():
+        for name, value in config.items():
             self.solver_settings.set_parameter(name, value)
 
         # Initialize base model
         self.__init_base_model()
-
 
     def __create_base_model(self):
         """
@@ -137,13 +152,13 @@ class CuoptOptimizer(Optimizer):
             constraints[metab_id] = constraint
 
         return problem, variables, constraints
-    
+
     def __init_base_model(self):
         problem, variables, constraints = self.__create_base_model()
         self.problem = problem
         self.variables = variables
         self.constraints = constraints
-    
+
     def solve(self, delta: LinearProgramDelta) -> Solution:
         """
         Applies the delta, solves the model, and returns the solution.
@@ -191,11 +206,11 @@ class CuoptOptimizer(Optimizer):
         self.problem.setObjective(objective_expr, sense)
 
         self.problem.solve(self.solver_settings)
-        #try:
+        # try:
         #    self.problem.solve(self.solver_settings)
-        #except Exception as e:
+        # except Exception as e:
         #    raise RuntimeError("Exception while solving cuOpt problem") from e
-        
+
         # Don't think cuOpt exports the constant of interest to python here, but CUOPT_SUCCESS=0
         status = self.problem.Status
         obj_value = self.problem.ObjValue
@@ -203,7 +218,7 @@ class CuoptOptimizer(Optimizer):
             success = True
         else:
             success = False
-        
+
         # Revert the delta (or rebuild the problem)
         if added_vars:
             self.__init_base_model()
@@ -214,8 +229,3 @@ class CuoptOptimizer(Optimizer):
                 self.variables[rxn_id].setLowerBound(lb)
 
         return Solution(success=success, status=status, obj_value=obj_value)
-        
-
-        
-
-        
