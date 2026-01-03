@@ -15,6 +15,8 @@ def configure_multiprocessing():
         try:
             multiprocessing.set_start_method("spawn")
         except RuntimeError:
+            # IF this has already been set somewhere else in the process, 
+            # we will just proceed and trust it was correctly set.
             pass
         MULTIPROCESSING_CONFIGURED = True
 

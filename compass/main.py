@@ -390,38 +390,13 @@ def parseArgs():
 
     parser.add_argument("--optimizer",
                         help = "Select an optimization software to solve flux balance analysis problems with. Select an optimizer with --help to see options specific to the optimizer",
-                        choices=["gurobi", "cuopt", "cuopt_server"],
+                        choices=["gurobi", "cuopt"],
                         default="gurobi")
 
     # Parse known args first to check for optimizer setting
     args, _ = parser.parse_known_args()
 
     if args.optimizer == "cuopt":
-        cuopt_server_group = parser.add_argument_group('CuOpt Options')
-        
-        default_method = 1 #pdlp 
-    if args.optimizer == "cuopt_server":
-        cuopt_server_group = parser.add_argument_group('CuOpt Server Options')
-        cuopt_server_group.add_argument("--cuopt-spawn-server",
-                            help="If True, then create a cuopt server instance. If false, then the caller should have already setup a cuopt server",
-                            type=bool,
-                            default=True)
-        cuopt_server_group.add_argument("--cuopt-gpu-count",
-                            help="Limits number GPUs a spawned cuopt server instance uses (passed to cuopt server CLI)",
-                            type=int,
-                            default=1,
-                            metavar="gpus")
-        cuopt_server_group.add_argument("--cuopt-ip",
-                            help="Select IP for cuopt server. Defaults to 0.0.0.0 (same as cuopt default)",
-                            type=str,
-                            default="0.0.0.0",
-                            metavar="ip")
-        cuopt_server_group.add_argument("--cuopt-port",
-                            help="Select port for cuopt server. Defaults to 5000 (same as cuopt default)",
-                            type=str,
-                            default="5000",
-                            metavar="port")
-        # TODO: expose https, certificate, other settings may be useful.
         default_method = 1 #pdlp 
     elif args.optimizer == "gurobi":
         default_method = 4
@@ -641,39 +616,13 @@ def entry():
     logger.debug("\nCOMPASS Started: {}".format(start_time))
     # Parse arguments and decide what course of action to take
 
-    context = compass_entry_setup(args, logger)
+    compass_work(args, logger, start_time)
 
-    try:
-        compass_work(args, logger, start_time)
-    finally:
-        compass_entry_cleanup(context)
-
-
-def compass_entry_setup(args, logger):
-    context = {}
-    if args['optimizer'] == "cuopt_server":
-        from compass.opt.cuopt_server import CuoptServerProcess
-        process = CuoptServerProcess(
-            output_dir=args['output_dir'], 
-            gpu_count=args['cuopt_gpu_count'], 
-            ip=args['cuopt_ip'], 
-            port=args['cuopt_port']
-        )
-        logger.debug(f"Spawned cuopt server process PID={process.proc.pid}")
-        # Store params for the CuoptServerOptimizer in args, so they can be passed to each sub process
-        args['cuopt_server_params'] = process.get_params()
-        context['cuopt_server_proc'] = process
-
-    return context
-
-def compass_entry_cleanup(context):
-    if 'cuopt_server_proc' in context:
-        process = context['cuopt_server_proc']
-        process.shutdown()
 
 def compass_work(args, logger, start_time):
     """
-    Splits out steps where most work is done so cleanup can be done if required
+    Main work of the algorithm, including deciding what steps to take based on arguments is here
+    This is split from entry() to enable using a try block around it (useful in followup PR)
     """
 
     if args['turbo'] < 1.0:
