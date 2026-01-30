@@ -408,8 +408,6 @@ def parseArgs():
         parser.print_help()
         sys.exit(0)
 
-    args = parser.parse_args()
-
     args = vars(args)  # Convert to a Dictionary
 
     load_config(args)

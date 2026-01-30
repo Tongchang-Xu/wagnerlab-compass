@@ -19,7 +19,7 @@ def get_gurobi_config(threads: int | None = None, method: int | None = None) -> 
     if threads is None:
         threads = 1
     if method is None:
-        method = 0
+        method = 4
     return {
         GRB.Param.OutputFlag: 0,  # Disable all output
         GRB.Param.LogToConsole: 0,  # Disable console output
@@ -150,9 +150,7 @@ class GurobiOptimizer(Optimizer):
         self.gp_model.setObjective(obj_expr, sense)
 
         self.gp_model.update()
-        logger.debug("Starting solving gp_model")
         self.gp_model.optimize()
-        logger.debug("Finished solving gp_model")
 
         status = self.gp_model.Status
         obj_value = self.gp_model.ObjVal

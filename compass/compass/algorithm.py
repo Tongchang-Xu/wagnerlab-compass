@@ -276,6 +276,7 @@ def compass_exchange(
         if not reactions:
             logger.debug(f"Skipping {met_id}")
             continue
+        
         # If we care about any of these reactions, then collect optimal uptake and secretion.
         # NOTE: This may include more reactions than strictly selected
         reactions = [model.reactions[x] for x in rxn_ids]

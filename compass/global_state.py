@@ -57,8 +57,7 @@ def init_selected_reactions_for_each_cell(path: Optional[str]) -> None:
     Whether fork or spawn is used depends on: python version, OS, and optimizer selected (CUDA cannot use fork)
     """
     global _selected_reactions_for_each_cell
-    if _selected_reactions_for_each_cell is None:
-        _selected_reactions_for_each_cell = _SelectedReactionsForEachCell(path)
+    _selected_reactions_for_each_cell = _SelectedReactionsForEachCell(path)
 
 
 def set_current_cell_name(cell_name: str) -> None:
