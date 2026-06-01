@@ -19,8 +19,8 @@ urls.Documentation = "https://compass-wagnerlab.readthedocs.io/"
 urls.Source = "https://github.com/wagnerlab-berkeley/Compass"
 urls.Home-page = "https://github.com/wagnerlab-berkeley/Compass"
 dependencies = [
-    'numpy>=1.12',
-    'pandas>=0.20',
+    'numpy>=1.12,<2.0.0',
+    'pandas>=0.20,<2.0.0',
     'tqdm>=4.11',
     'python-libsbml>=5.13',
     'six>=1.10',
@@ -28,8 +28,8 @@ dependencies = [
     'scipy>=1.0',
     'python-igraph>=0.9',
     'leidenalg>=0.8.2',
-    'anndata',
-    'gurobipy>=11.0.0',
+    'anndata<0.10.0',
+    'gurobipy>=11.0.0,<13.0.0',
     # for debug logging (referenced from the issue template)
     "session-info",
 ]
